@@ -32,6 +32,9 @@ const imgOf = $el => $el.attr('data-src') || $el.attr('data-lazy-src') || $el.at
 const abs = src => (!src ? '' : /^https?:\/\//.test(src) ? src : site + (src.startsWith('/') ? src : '/' + src))
 const byNumber = (a, b) => (parseFloat(b.number) || 0) - (parseFloat(a.number) || 0)
 
+const genreNames = list =>
+  (Array.isArray(list) ? list : []).map(g => (typeof g === 'string' ? g : g?.name)).filter(Boolean)
+
 const toItem = i => ({
   title: i.title || i.name || i.slug,
   slug: i.slug || i.id,
@@ -39,7 +42,9 @@ const toItem = i => ({
   cover: abs(i.coverImage || i.cover || i.image),
   type: i.type || '',
   status: i.status || '',
-  rating: i.rating ?? i.avgRating ?? null
+  genres: genreNames(i.genres),
+  rating: i.rating ?? i.avgRating ?? null,
+  latestChapter: i.latestChapter ?? null
 })
 
 const pickList = d =>
@@ -56,6 +61,11 @@ export async function latest({ page = 1 } = {}) {
     ...toItem(i),
     chapters: (i.recentChapters ?? []).map(c => ({ slug: c.slug, number: String(c.number), timeAgo: c.timeAgo || '' }))
   }))
+}
+
+export async function popular({ page = 1 } = {}) {
+  const data = await get(`/api/popular?page=${page}`, true)
+  return pickList(data).map(toItem).filter(x => x.slug)
 }
 
 async function chapterListApi(slug) {
@@ -131,6 +141,7 @@ export async function chapter(slug, chapterSlug) {
   return {
     slug: chapterSlug,
     comic: slug,
+    number: chapterSlug.replace(/^chapter-/i, '').replace(/-/g, '.'),
     url: `${site}/read/${slug}/${chapterSlug}`,
     images,
     prev: nav('prevChapterSlug'),

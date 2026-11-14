@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { scraper } from '../services/scraper.service.js';
+import { runDiagnostics } from '../services/diagnostics.service.js';
 import type { ProviderName } from '../types/index.js';
 
 function parseSource(s?: string): ProviderName | undefined {
@@ -220,5 +221,23 @@ export async function registerRoutes(app: FastifyInstance) {
       { name: 'shinigami', description: 'Shinigami' },
       { name: 'manta', description: 'Manta' },
     ],
+  }));
+
+  app.get<{
+    Querystring: { source?: string };
+  }>('/api/diagnostics', {
+    schema: {
+      tags: ['Meta'],
+      summary: 'Live check of every provider (search, latest, popular, genres, detail, chapter)',
+      querystring: {
+        type: 'object',
+        properties: {
+          source: { type: 'string', enum: ['lumos', 'shinigami', 'manta'] },
+        },
+      },
+    },
+  }, async (req) => ({
+    success: true,
+    data: await runDiagnostics(parseSource(req.query.source)),
   }));
 }

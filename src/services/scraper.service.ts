@@ -22,6 +22,10 @@ interface ExecuteOptions {
   ttl: number;
 }
 
+function isEmpty(data: unknown): boolean {
+  return Array.isArray(data) && data.length === 0;
+}
+
 export class ScraperService {
   private async execute<T>(
     { action, source, strict = false, cacheKey, ttl }: ExecuteOptions,
@@ -32,15 +36,22 @@ export class ScraperService {
 
     const adapters = strict && source ? [getAdapter(source)] : getOrderedAdapters(source);
     let lastError: unknown = new Error('All providers failed');
+    let emptyResult: Outcome<T> | null = null;
 
     for (const adapter of adapters) {
       const start = Date.now();
       try {
         const data = await run(adapter);
         db.logScrape(adapter.name, action, true, Date.now() - start);
-        const result = { data, source: adapter.name as Source };
-        await cache.set(cacheKey, result, ttl);
-        return { ...result, cached: false };
+        const outcome = { data, source: adapter.name as Source, cached: false };
+
+        if (!isEmpty(data)) {
+          await cache.set(cacheKey, { data, source: outcome.source }, ttl);
+          return outcome;
+        }
+
+        if (source) return outcome;
+        emptyResult ??= outcome;
       } catch (e) {
         lastError = e;
         const message = (e as Error).message;
@@ -49,6 +60,7 @@ export class ScraperService {
       }
     }
 
+    if (emptyResult) return emptyResult;
     throw lastError;
   }
 

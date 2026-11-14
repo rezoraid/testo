@@ -15,7 +15,7 @@ export const pool = dbEnabled
     })
   : null;
 
-pool?.on('error', (err) => {
+pool?.on('error', (err: Error) => {
   console.error('[pg] unexpected error on idle client', err.message);
 });
 

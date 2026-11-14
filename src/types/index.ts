@@ -38,6 +38,7 @@ export interface ChapterContent {
   prev?: string | null;
   next?: string | null;
   url?: string;
+  headers?: Record<string, string>;
 }
 
 export interface GenreItem {

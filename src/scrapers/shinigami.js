@@ -33,15 +33,24 @@ const toItem = m => ({
   latestChapter: m.latest_chapter_number ?? null
 })
 
-async function list({ q = '', page = 1, size = 24 } = {}) {
+async function list({ q = '', page = 1, size = 24, sort = '' } = {}) {
   const qs = new URLSearchParams({ page, page_size: size })
   if (q) qs.set('q', q)
+  if (sort) qs.set('sort_by', sort)
   const res = await api(`/v1/manga/list?${qs}`)
   return (res.data ?? []).filter(m => m?.manga_id && m.title).map(toItem)
 }
 
 export const search = (q, { page = 1 } = {}) => list({ q, page })
 export const latest = ({ page = 1 } = {}) => list({ page })
+export const popular = ({ page = 1 } = {}) => list({ page, sort: 'view_count' })
+
+export async function genres() {
+  const res = await api('/v1/genre/list')
+  return (res.data ?? [])
+    .filter(g => g?.name && g?.slug)
+    .map(g => ({ id: String(g.taxonomy_id ?? g.slug), name: g.name, slug: g.slug }))
+}
 
 async function chapterList(id) {
   const size = 100

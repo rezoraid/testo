@@ -16,7 +16,7 @@ export class CacheService {
       maxRetriesPerRequest: 2,
       lazyConnect: true,
       connectTimeout: 5000,
-      retryStrategy: (times) => (times > STARTUP_ATTEMPTS ? null : times * 500),
+      retryStrategy: (times: number) => (times > STARTUP_ATTEMPTS ? null : times * 500),
     });
     client.on('error', (err: Error) => {
       console.warn('[redis] error:', err.message);
@@ -24,7 +24,7 @@ export class CacheService {
 
     try {
       await client.connect();
-      client.options.retryStrategy = (times) => Math.min(times * 500, 5000);
+      client.options.retryStrategy = (times: number) => Math.min(times * 500, 5000);
       this.client = client;
       console.log('[redis] connected');
     } catch (e) {
