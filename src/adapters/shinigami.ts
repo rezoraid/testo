@@ -13,7 +13,7 @@ async function api(path: string, retries = 2): Promise<any> {
       signal: AbortSignal.timeout(15000),
     });
     if (!res.ok) throw Object.assign(new Error(`HTTP ${res.status}`), { status: res.status });
-    const json = await res.json();
+    const json: any = await res.json();
     if (json.retcode !== undefined && json.retcode !== 0) throw new Error(json.message || 'API error');
     return json;
   } catch (e) {

@@ -5,7 +5,7 @@ import type { ListItem, DetailItem, ChapterContent, GenreItem } from '../types/i
 const BASES = ['https://03.lumosgg.com', 'https://02.lumosgg.com', 'https://lumoskomik.com'];
 const UA = 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36';
 
-async function getJson(path: string) {
+async function getJson(path: string): Promise<any> {
   let lastErr: unknown;
   for (const base of BASES) {
     try {
