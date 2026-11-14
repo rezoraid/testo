@@ -18,7 +18,7 @@ export async function registerRoutes(app: FastifyInstance) {
   }>('/api/search', {
     schema: {
       tags: ['Comics'],
-      summary: 'Search comics across providers',
+      summary: 'Search all providers at once (merged, duplicates removed) or one provider via source',
       querystring: {
         type: 'object',
         properties: {
@@ -35,7 +35,7 @@ export async function registerRoutes(app: FastifyInstance) {
     if (!q) return reply.code(400).send({ success: false, error: 'Query q is required' });
     const start = Date.now();
     try {
-      const { data, source, cached } = await scraper.search(q, {
+      const { data, source, cached, providers } = await scraper.search(q, {
         page: Number(req.query.page) || 1,
         limit: Math.min(Number(req.query.limit) || 20, 50),
         source: parseSource(req.query.source),
@@ -43,7 +43,7 @@ export async function registerRoutes(app: FastifyInstance) {
       return {
         success: true,
         data,
-        meta: { source, page: Number(req.query.page) || 1, cached, took: Date.now() - start },
+        meta: { source, providers, page: Number(req.query.page) || 1, cached, took: Date.now() - start },
       };
     } catch (e) {
       return reply.code(502).send({ success: false, error: (e as Error).message });
@@ -68,7 +68,7 @@ export async function registerRoutes(app: FastifyInstance) {
   }, async (req, reply) => {
     const start = Date.now();
     try {
-      const { data, source, cached } = await scraper.latest({
+      const { data, source, cached, providers } = await scraper.latest({
         page: Number(req.query.page) || 1,
         type: req.query.type,
         source: parseSource(req.query.source),
@@ -76,7 +76,7 @@ export async function registerRoutes(app: FastifyInstance) {
       return {
         success: true,
         data,
-        meta: { source, page: Number(req.query.page) || 1, cached, took: Date.now() - start },
+        meta: { source, providers, page: Number(req.query.page) || 1, cached, took: Date.now() - start },
       };
     } catch (e) {
       return reply.code(502).send({ success: false, error: (e as Error).message });
@@ -100,15 +100,76 @@ export async function registerRoutes(app: FastifyInstance) {
   }, async (req, reply) => {
     const start = Date.now();
     try {
-      const { data, source, cached } = await scraper.popular({
+      const { data, source, cached, providers } = await scraper.popular({
         page: Number(req.query.page) || 1,
         source: parseSource(req.query.source),
       });
       return {
         success: true,
         data,
-        meta: { source, page: Number(req.query.page) || 1, cached, took: Date.now() - start },
+        meta: { source, providers, page: Number(req.query.page) || 1, cached, took: Date.now() - start },
       };
+    } catch (e) {
+      return reply.code(502).send({ success: false, error: (e as Error).message });
+    }
+  });
+
+  app.get<{
+    Querystring: { genre?: string; type?: string; page?: string; limit?: string; source?: string };
+  }>('/api/browse', {
+    schema: {
+      tags: ['Comics'],
+      summary: 'Filter comics by genre (comma separated slugs, all must match) and/or type',
+      querystring: {
+        type: 'object',
+        properties: {
+          genre: { type: 'string' },
+          type: { type: 'string' },
+          page: { type: 'string' },
+          limit: { type: 'string' },
+          source: { type: 'string', enum: ['lumos', 'shinigami', 'manta'] },
+        },
+      },
+    },
+  }, async (req, reply) => {
+    const genre = (req.query.genre || '').trim();
+    const type = (req.query.type || '').trim();
+    if (!genre && !type) {
+      return reply.code(400).send({ success: false, error: 'Query genre or type is required' });
+    }
+    const start = Date.now();
+    const page = Number(req.query.page) || 1;
+    try {
+      const { data, source, cached, providers } = await scraper.browse({
+        genre,
+        type,
+        page,
+        limit: Math.min(Number(req.query.limit) || 20, 50),
+        source: parseSource(req.query.source),
+      });
+      return { success: true, data, meta: { source, providers, page, cached, took: Date.now() - start } };
+    } catch (e) {
+      return reply.code(502).send({ success: false, error: (e as Error).message });
+    }
+  });
+
+  app.get<{
+    Querystring: { source?: string };
+  }>('/api/types', {
+    schema: {
+      tags: ['Comics'],
+      summary: 'List available comic types',
+      querystring: {
+        type: 'object',
+        properties: {
+          source: { type: 'string', enum: ['lumos', 'shinigami', 'manta'] },
+        },
+      },
+    },
+  }, async (req, reply) => {
+    try {
+      const { data, source, cached } = await scraper.types({ source: parseSource(req.query.source) });
+      return { success: true, data, meta: { source, cached } };
     } catch (e) {
       return reply.code(502).send({ success: false, error: (e as Error).message });
     }

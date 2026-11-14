@@ -68,56 +68,136 @@ export async function popular({ page = 1 } = {}) {
   return pickList(data).map(toItem).filter(x => x.slug)
 }
 
+const STATUSES = {
+  ongoing: 'ongoing',
+  'on going': 'ongoing',
+  berjalan: 'ongoing',
+  completed: 'completed',
+  tamat: 'completed',
+  selesai: 'completed',
+  hiatus: 'hiatus'
+}
+
+const normalizeStatus = value => STATUSES[clean(value).toLowerCase()] || ''
+const personNames = value => [].concat(value ?? []).map(p => clean(p?.name ?? p)).filter(Boolean).join(', ')
+
 async function chapterListApi(slug) {
   const data = await get(`/api/chapters/list?comic=${encodeURIComponent(slug)}`, true)
   return (data?.chapters ?? [])
     .map(c => {
       const s = c.slug || `chapter-${String(c.number).replace(/\./g, '-')}`
-      return { slug: s, number: c.number != null ? String(c.number) : s.replace(/^chapter-/, '').replace(/-/g, '.'), title: c.title || '' }
+      return {
+        slug: s,
+        number: c.number != null ? String(c.number) : s.replace(/^chapter-/, '').replace(/-/g, '.'),
+        title: c.title || '',
+        date: c.publishedAt || c.createdAt || c.updatedAt || null
+      }
     })
     .sort(byNumber)
 }
 
-export async function detail(slug) {
-  const $ = await load(await get(`/comic/${encodeURIComponent(slug)}`))
+function mergeChapters(...lists) {
+  const merged = new Map()
+  for (const chapter of lists.flat()) {
+    const existing = merged.get(chapter.slug)
+    if (!existing) {
+      merged.set(chapter.slug, { ...chapter })
+      continue
+    }
+    existing.title ||= chapter.title
+    existing.date ||= chapter.date
+  }
+  return [...merged.values()].sort(byNumber)
+}
 
-  let ld = {}
+export function parseSeries(ld = {}) {
+  return {
+    title: clean(ld.name),
+    altTitles: [].concat(ld.alternateName ?? []).map(clean).filter(Boolean),
+    cover: ld.image || '',
+    synopsis: clean(ld.description),
+    author: personNames(ld.author),
+    artist: personNames(ld.illustrator),
+    genres: [...new Set([].concat(ld.genre ?? []).map(clean).filter(Boolean))],
+    year: parseInt(ld.datePublished, 10) || null,
+    rating: Number(ld.aggregateRating?.ratingValue) || null,
+    totalChapters: Number(ld.numberOfEpisodes) || 0
+  }
+}
+
+function readSeriesLd($) {
+  let series = {}
   $('script[type="application/ld+json"]').each((_, s) => {
     try {
-      for (const x of [].concat(JSON.parse($(s).text()))) if (x?.['@type'] === 'ComicSeries') ld = x
+      const nodes = [].concat(JSON.parse($(s).text())).flatMap(x => x?.['@graph'] ?? x)
+      series = nodes.find(x => x?.['@type'] === 'ComicSeries') ?? series
     } catch {}
   })
+  return series
+}
 
-  const genres = [...new Set($('a[href*="genre="]').map((_, a) => clean($(a).text())).get().filter(Boolean))]
-  const text = clean($('#main-content').text() || $('body').text())
-  const field = re => text.match(re)?.[1] || ''
-
+function readChapters($, slug) {
   const chapters = []
-  $('#tab-chapters a[href*="/read/"]').each((_, a) => {
+  $('#tab-chapters a[href*="/read/"], a[href*="/read/"]').each((_, a) => {
     const m = String($(a).attr('href')).match(/\/read\/([^/?#]+)\/([^/?#]+)/)
     if (!m || m[1] !== slug || chapters.some(c => c.slug === m[2])) return
     chapters.push({
       slug: m[2],
       number: clean($(a).text()).match(/Chapter\s+(\d+(?:\.\d+)?)/i)?.[1] || m[2].replace(/^chapter-/, '').replace(/-/g, '.'),
-      title: clean($(a).find('span').first().text())
+      title: clean($(a).find('span').first().text()),
+      date: $(a).find('time').attr('datetime') || null
     })
   })
-  chapters.sort(byNumber)
+  return chapters
+}
 
-  const raw = $('[data-sr]').first().attr('data-sr')
+function readGenreLinks($) {
+  const scope = $('#main-content').length ? $('#main-content') : $('body')
+  return [...new Set(scope.find('a[href*="genre="]').map((_, a) => clean($(a).text())).get().filter(Boolean))]
+}
+
+export async function detail(slug) {
+  const $ = await load(await get(`/comic/${encodeURIComponent(slug)}`))
+  const meta = parseSeries(readSeriesLd($))
+
+  const text = clean($('#main-content').text() || $('body').text())
+  const field = re => text.match(re)?.[1] || ''
+
+  const htmlChapters = readChapters($, slug)
+  const incomplete = !htmlChapters.length || htmlChapters.length < meta.totalChapters
+  const apiChapters = incomplete ? await chapterListApi(slug).catch(() => []) : []
+
+  const encoded = $('[data-sr]').first().attr('data-sr')
+  const synopsis = (encoded && Buffer.from(encoded, 'base64').toString('utf8').trim()) || meta.synopsis
+
   return {
-    title: clean($('h1').first().text()) || ld.name || slug,
+    title: meta.title || clean($('h1').first().text()) || slug,
+    altTitles: meta.altTitles,
     slug,
     url: `${site}/comic/${slug}`,
-    cover: abs(ld.image || $('meta[property="og:image"]').attr('content')),
-    synopsis: (raw && Buffer.from(raw, 'base64').toString('utf8').trim()) || clean(ld.description),
-    status: field(/Status\s+(ongoing|completed|hiatus)/i),
-    type: field(/Type\s+(manhwa|manga|manhua)/i),
-    author: clean(ld.author?.name),
-    genres: genres.length ? genres : (ld.genre ?? []),
-    rating: num($('#stats-rating-value').text()),
-    chapters: chapters.length ? chapters : await chapterListApi(slug).catch(() => [])
+    cover: abs(meta.cover || $('meta[property="og:image"]').attr('content')),
+    synopsis: synopsis || clean($('meta[property="og:description"]').attr('content')),
+    status: normalizeStatus(field(/Status\s*:?\s*(on ?going|berjalan|completed|tamat|selesai|hiatus)/i)),
+    type: field(/(?:Type|Tipe)\s*:?\s*(manhwa|manga|manhua|webtoon|doujinshi)/i).toLowerCase(),
+    author: meta.author,
+    artist: meta.artist,
+    year: meta.year,
+    genres: meta.genres.length ? meta.genres : readGenreLinks($),
+    rating: meta.rating ?? num($('#stats-rating-value').text()),
+    totalChapters: meta.totalChapters,
+    chapters: mergeChapters(htmlChapters, apiChapters)
   }
+}
+
+export async function genres() {
+  const $ = await load(await get('/browse'))
+  const found = new Map()
+  $('a[href*="genre="]').each((_, a) => {
+    const value = decodeURIComponent(String($(a).attr('href')).match(/genre=([^&#]+)/)?.[1] ?? '').replace(/\+/g, ' ')
+    const name = clean($(a).text()).replace(/\s*\(?\d+\)?$/, '') || value
+    if (value && name && !found.has(value.toLowerCase())) found.set(value.toLowerCase(), { name, slug: value })
+  })
+  return [...found.values()]
 }
 
 export async function chapter(slug, chapterSlug) {

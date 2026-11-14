@@ -4,6 +4,7 @@ import type { ListItem, DetailItem, ChapterContent, GenreItem } from '../types/i
 
 export class ShinigamiAdapter extends BaseAdapter {
   name = 'shinigami' as const;
+  readonly pagedSearch = true;
 
   async search(query: string, opts: { page?: number; limit?: number } = {}): Promise<ListItem[]> {
     const raw = await shinigami.search(query, { page: opts.page ?? 1 });

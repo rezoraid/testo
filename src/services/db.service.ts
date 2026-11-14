@@ -1,9 +1,6 @@
 import { dbEnabled, query } from '../db/pool.js';
+import { toSlug } from '../utils/slug.js';
 import type { ListItem, DetailItem } from '../types/index.js';
-
-function toSlug(name: string): string {
-  return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-}
 
 function toValidDate(value?: string | null): string | null {
   return value && !Number.isNaN(Date.parse(value)) ? value : null;

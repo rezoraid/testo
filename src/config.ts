@@ -36,5 +36,9 @@ export const config = {
     timeWindow: process.env.RATE_LIMIT_WINDOW || '1 minute',
   },
 
+  browse: {
+    scanPages: Number(process.env.BROWSE_SCAN_PAGES) || 5,
+  },
+
   requestTimeout: 30000,
 };

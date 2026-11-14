@@ -2,6 +2,7 @@ import type { ProviderAdapter, ListItem, DetailItem, ChapterContent, GenreItem, 
 
 export abstract class BaseAdapter implements ProviderAdapter {
   abstract name: ProviderName;
+  readonly pagedSearch: boolean = false;
 
   abstract search(query: string, opts?: { page?: number; limit?: number }): Promise<ListItem[]>;
   abstract latest(opts?: { page?: number; type?: string }): Promise<ListItem[]>;
@@ -11,6 +12,16 @@ export abstract class BaseAdapter implements ProviderAdapter {
 
   async genres(): Promise<GenreItem[]> {
     return [];
+  }
+
+  async catalog(opts: { page: number; type?: string }): Promise<ListItem[]> {
+    return this.popular({ page: opts.page });
+  }
+
+  async types(): Promise<string[]> {
+    const items = await this.catalog({ page: 1 });
+    const types = items.map((item) => (item.type ?? '').toLowerCase()).filter(Boolean);
+    return [...new Set(types)].sort();
   }
 
   protected makeId(raw: string | number): string {
@@ -40,9 +51,5 @@ export abstract class BaseAdapter implements ProviderAdapter {
   protected requireImages(images: string[]): string[] {
     if (!images.length) throw new Error('Chapter tidak memiliki gambar');
     return images;
-  }
-
-  protected toSlug(name: string): string {
-    return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
   }
 }

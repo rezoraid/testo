@@ -1,5 +1,6 @@
 import * as lumos from '../scrapers/lumos.js';
 import { BaseAdapter } from './base.js';
+import { toSlug } from '../utils/slug.js';
 import type { ListItem, DetailItem, ChapterContent, GenreItem } from '../types/index.js';
 
 export class LumosAdapter extends BaseAdapter {
@@ -26,22 +27,26 @@ export class LumosAdapter extends BaseAdapter {
       id: c.slug,
       number: String(c.number ?? ''),
       title: c.title || '',
-      date: null,
+      date: c.date || null,
     }));
 
     return this.requireDetail({
       id: this.makeId(d.slug),
       source: this.name,
       title: d.title,
+      altTitles: d.altTitles,
       cover: d.cover || '',
       type: d.type,
       status: d.status,
       genres: d.genres || [],
       rating: d.rating ?? null,
-      chapterCount: chapters.length,
+      latestChapter: chapters[0]?.number ?? null,
+      chapterCount: Math.max(chapters.length, d.totalChapters || 0),
       url: d.url,
       synopsis: d.synopsis || '',
       author: d.author || '',
+      artist: d.artist || '',
+      year: d.year ?? null,
       chapters,
     });
   }
@@ -62,12 +67,22 @@ export class LumosAdapter extends BaseAdapter {
   }
 
   async genres(): Promise<GenreItem[]> {
+    const listed = await lumos.genres().catch(() => []);
+    if (listed.length) {
+      return listed.map((g: { name: string; slug: string }) => ({
+        id: toSlug(g.slug),
+        name: g.name,
+        slug: toSlug(g.slug),
+        source: this.name,
+      }));
+    }
+
     const items = await this.popular({ page: 1 });
     const names = new Set(items.flatMap((item) => item.genres ?? []));
     return [...names].sort().map((name) => ({
-      id: this.toSlug(name),
+      id: toSlug(name),
       name,
-      slug: this.toSlug(name),
+      slug: toSlug(name),
       source: this.name,
     }));
   }

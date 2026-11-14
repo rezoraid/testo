@@ -42,12 +42,14 @@ Docs: `http://localhost:3000/docs`
 | GET | `/api/popular?page=&source=` | Popular / trending |
 | GET | `/api/detail/:source/:id` | Detail + chapter list |
 | GET | `/api/chapter/:source/:seriesId/:chapterId` | Chapter images |
+| GET | `/api/browse?genre=&type=&page=&limit=&source=` | Filter by genre (slug, boleh dipisah koma) dan/atau type |
 | GET | `/api/genres?source=` | Genre list |
+| GET | `/api/types?source=` | Type list |
 | GET | `/api/providers` | List providers |
 | GET | `/health` | Health check |
 | GET | `/docs` | Swagger UI |
 
-`source` opsional: `lumos` | `shinigami` | `manta`. Jika tidak diisi, sistem mencoba provider sesuai `PROVIDER_ORDER` dan fallback otomatis.
+`source` opsional: `lumos` | `shinigami` | `manta`. Jika tidak diisi, `search`, `latest`, `popular`, dan `browse` mengambil dari ketiga provider sekaligus, digabung, dan duplikat (judul sama) dihapus. Tiap item punya `sources` berisi semua `{source, id}` yang memuat komik tersebut. Jika `source` diisi, hanya provider itu yang dipakai dan fallback ke provider lain terjadi saat error.
 
 ## ID Format
 

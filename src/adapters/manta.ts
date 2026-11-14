@@ -1,8 +1,10 @@
 import * as manta from '../scrapers/manta.js';
 import { BaseAdapter } from './base.js';
+import { toSlug } from '../utils/slug.js';
 import type { ListItem, DetailItem, ChapterContent, GenreItem } from '../types/index.js';
 
 const NOISY_TAGS = /^(New|Event|Free Pass|Completed)$/i;
+const TYPES = ['comic', 'manga', 'novel'];
 
 export class MantaAdapter extends BaseAdapter {
   name = 'manta' as const;
@@ -19,6 +21,15 @@ export class MantaAdapter extends BaseAdapter {
 
   async popular(opts: { page?: number } = {}): Promise<ListItem[]> {
     return this.latest({ page: opts.page ?? 1, type: 'comic' });
+  }
+
+  async catalog(opts: { page: number; type?: string }): Promise<ListItem[]> {
+    const type = opts.type && TYPES.includes(opts.type) ? opts.type : 'comic';
+    return this.latest({ page: opts.page, type });
+  }
+
+  async types(): Promise<string[]> {
+    return TYPES;
   }
 
   async detail(id: string): Promise<DetailItem> {
@@ -67,9 +78,9 @@ export class MantaAdapter extends BaseAdapter {
       items.flatMap((item) => item.genres ?? []).filter((g) => g.length > 2 && !NOISY_TAGS.test(g))
     );
     return [...names].sort().map((name) => ({
-      id: this.toSlug(name),
+      id: toSlug(name),
       name,
-      slug: this.toSlug(name),
+      slug: toSlug(name),
       source: this.name,
     }));
   }

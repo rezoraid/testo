@@ -67,6 +67,11 @@ async function inspect(adapter: ProviderAdapter): Promise<ProviderReport> {
   await step(report, 'search', () => adapter.search('solo', { limit: 10 }), summarizeList);
   const latest = await step(report, 'latest', () => adapter.latest({ page: 1 }), summarizeList);
   await step(report, 'popular', () => adapter.popular({ page: 1 }), summarizeList);
+  await step(report, 'types', () => adapter.types(), (list) => ({
+    ok: list.length > 0,
+    count: list.length,
+    sample: list.join(', '),
+  }));
   await step(report, 'genres', async () => (await adapter.genres?.()) ?? [], (list) => ({
     ok: list.length > 0,
     count: list.length,
