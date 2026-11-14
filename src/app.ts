@@ -17,6 +17,7 @@ export async function buildApp() {
           : undefined,
     },
     requestTimeout: config.requestTimeout,
+    trustProxy: true,
   });
 
   await app.register(cors, {
@@ -36,7 +37,6 @@ export async function buildApp() {
         description: 'Unified manga/manhwa/comic scraper combining Lumos, Shinigami, and Manta providers with automatic fallback, Redis caching, and PostgreSQL persistence.',
         version: '1.0.0',
       },
-      servers: [{ url: `http://localhost:${config.port}` }],
       tags: [
         { name: 'Comics', description: 'Search, latest, popular, detail, chapter' },
         { name: 'Meta', description: 'Providers & health' },
@@ -49,16 +49,19 @@ export async function buildApp() {
     uiConfig: { docExpansion: 'list', deepLinking: true },
   });
 
-  await registerRoutes(app);
-
   app.setErrorHandler((err: FastifyError, _req, reply) => {
     app.log.error(err);
-    const status = err.statusCode ?? 500;
-    reply.code(status).send({
+    reply.code(err.statusCode ?? 500).send({
       success: false,
       error: err.message || 'Internal Server Error',
     });
   });
+
+  app.setNotFoundHandler((_req, reply) => {
+    reply.code(404).send({ success: false, error: 'Route not found' });
+  });
+
+  await registerRoutes(app);
 
   await cache.connect().catch(() => {});
 

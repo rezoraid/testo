@@ -1,10 +1,21 @@
-import { query } from '../db/pool.js';
-import type { ListItem, DetailItem, GenreItem } from '../types/index.js';
+import { dbEnabled, query } from '../db/pool.js';
+import type { ListItem, DetailItem } from '../types/index.js';
+
+function toSlug(name: string): string {
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+}
+
+function toValidDate(value?: string | null): string | null {
+  return value && !Number.isNaN(Date.parse(value)) ? value : null;
+}
 
 export class DbService {
   async upsertComic(item: ListItem | DetailItem): Promise<void> {
+    if (!dbEnabled) return;
     try {
+      const detail = item as DetailItem;
       const originalId = item.id.includes(':') ? item.id.split(':').slice(1).join(':') : item.id;
+
       await query(
         `INSERT INTO comics (id, source, original_id, title, cover, type, status, synopsis, author, artist, rating, latest_chapter, chapter_count, url, updated_at)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,NOW())
@@ -15,6 +26,7 @@ export class DbService {
            status = COALESCE(EXCLUDED.status, comics.status),
            synopsis = COALESCE(EXCLUDED.synopsis, comics.synopsis),
            author = COALESCE(EXCLUDED.author, comics.author),
+           artist = COALESCE(EXCLUDED.artist, comics.artist),
            rating = COALESCE(EXCLUDED.rating, comics.rating),
            latest_chapter = COALESCE(EXCLUDED.latest_chapter, comics.latest_chapter),
            chapter_count = COALESCE(EXCLUDED.chapter_count, comics.chapter_count),
@@ -28,9 +40,9 @@ export class DbService {
           item.cover || null,
           item.type || null,
           item.status || null,
-          (item as DetailItem).synopsis || null,
-          (item as DetailItem).author || null,
-          (item as DetailItem).artist || null,
+          detail.synopsis || null,
+          detail.author || null,
+          detail.artist || null,
           item.rating ?? null,
           item.latestChapter != null ? String(item.latestChapter) : null,
           item.chapterCount ?? null,
@@ -38,80 +50,72 @@ export class DbService {
         ]
       );
 
-      if (item.genres?.length) {
-        for (const g of item.genres) {
-          const slug = g.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-          if (!slug) continue;
-          await query(
-            `INSERT INTO genres (id, name, slug) VALUES ($1,$2,$3)
-             ON CONFLICT (id) DO NOTHING`,
-            [slug, g, slug]
-          );
-          await query(
-            `INSERT INTO comic_genres (comic_id, genre_id) VALUES ($1,$2)
-             ON CONFLICT DO NOTHING`,
-            [item.id, slug]
-          );
-        }
-      }
-
-      if ((item as DetailItem).chapters?.length) {
-        for (const ch of (item as DetailItem).chapters) {
-          await query(
-            `INSERT INTO chapters (id, comic_id, number, title, date)
-             VALUES ($1,$2,$3,$4,$5)
-             ON CONFLICT (comic_id, id) DO UPDATE SET
-               number = COALESCE(EXCLUDED.number, chapters.number),
-               title = COALESCE(EXCLUDED.title, chapters.title)`,
-            [ch.id, item.id, ch.number || null, ch.title || null, ch.date || null]
-          );
-        }
-      }
+      await this.saveGenres(item.id, item.genres ?? []);
+      await this.saveChapters(item.id, detail.chapters ?? []);
     } catch (e) {
-      // non-blocking: log but don't fail the request
       console.warn('[db] upsert failed:', (e as Error).message);
     }
   }
 
-  async upsertMany(items: ListItem[]): Promise<void> {
-    await Promise.all(items.map((i) => this.upsertComic(i)));
+  private async saveGenres(comicId: string, names: string[]): Promise<void> {
+    const genres = new Map<string, string>();
+    for (const name of names) {
+      const slug = toSlug(name);
+      if (slug) genres.set(slug, name);
+    }
+    if (!genres.size) return;
+
+    const slugs = [...genres.keys()];
+    await query(
+      `INSERT INTO genres (id, name, slug)
+       SELECT s, n, s FROM unnest($1::text[], $2::text[]) AS t(s, n)
+       ON CONFLICT DO NOTHING`,
+      [slugs, slugs.map((slug) => genres.get(slug))]
+    );
+    await query(
+      `INSERT INTO comic_genres (comic_id, genre_id)
+       SELECT $1, unnest($2::text[])
+       ON CONFLICT DO NOTHING`,
+      [comicId, slugs]
+    );
   }
 
-  async logScrape(provider: string, action: string, success: boolean, durationMs: number, error?: string) {
+  private async saveChapters(comicId: string, chapters: DetailItem['chapters']): Promise<void> {
+    const unique = new Map(chapters.map((ch) => [ch.id, ch]));
+    if (!unique.size) return;
+
+    const rows = [...unique.values()];
+    await query(
+      `INSERT INTO chapters (id, comic_id, number, title, date)
+       SELECT id, $1, number, title, date
+       FROM unnest($2::text[], $3::text[], $4::text[], $5::timestamptz[]) AS t(id, number, title, date)
+       ON CONFLICT (comic_id, id) DO UPDATE SET
+         number = COALESCE(EXCLUDED.number, chapters.number),
+         title = COALESCE(EXCLUDED.title, chapters.title),
+         date = COALESCE(EXCLUDED.date, chapters.date)`,
+      [
+        comicId,
+        rows.map((ch) => ch.id),
+        rows.map((ch) => ch.number || null),
+        rows.map((ch) => ch.title || null),
+        rows.map((ch) => toValidDate(ch.date)),
+      ]
+    );
+  }
+
+  async upsertMany(items: ListItem[]): Promise<void> {
+    await Promise.all(items.map((item) => this.upsertComic(item)));
+  }
+
+  async logScrape(provider: string, action: string, success: boolean, durationMs: number, error?: string): Promise<void> {
+    if (!dbEnabled) return;
     try {
       await query(
         `INSERT INTO scrape_logs (provider, action, success, duration_ms, error) VALUES ($1,$2,$3,$4,$5)`,
         [provider, action, success, durationMs, error || null]
       );
     } catch {
-      // ignore
-    }
-  }
-
-  async searchLocal(q: string, limit = 20): Promise<ListItem[]> {
-    try {
-      const res = await query(
-        `SELECT id, source, title, cover, type, status, rating, latest_chapter, chapter_count, url
-         FROM comics
-         WHERE to_tsvector('simple', title) @@ plainto_tsquery('simple', $1)
-         ORDER BY updated_at DESC
-         LIMIT $2`,
-        [q, limit]
-      );
-      return res.rows.map((r: any) => ({
-        id: r.id,
-        source: r.source,
-        title: r.title,
-        cover: r.cover || '',
-        type: r.type,
-        status: r.status,
-        rating: r.rating,
-        latestChapter: r.latest_chapter,
-        chapterCount: r.chapter_count,
-        url: r.url,
-      }));
-    } catch {
-      return [];
+      return;
     }
   }
 }

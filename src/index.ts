@@ -1,9 +1,14 @@
 import { buildApp } from './app.js';
 import { config } from './config.js';
-import { closePool } from './db/pool.js';
+import { closePool, dbEnabled } from './db/pool.js';
+import { runMigrations } from './db/migrate.js';
 import { cache } from './services/cache.service.js';
 
 async function main() {
+  if (dbEnabled) {
+    await runMigrations().catch((e: Error) => console.warn('[db] migration failed:', e.message));
+  }
+
   const app = await buildApp();
 
   const shutdown = async () => {

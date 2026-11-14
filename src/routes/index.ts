@@ -10,10 +10,8 @@ function parseSource(s?: string): ProviderName | undefined {
 }
 
 export async function registerRoutes(app: FastifyInstance) {
-  // Health
   app.get('/health', async () => ({ status: 'ok', ts: Date.now() }));
 
-  // Search
   app.get<{
     Querystring: { q?: string; page?: string; limit?: string; source?: string };
   }>('/api/search', {
@@ -51,7 +49,6 @@ export async function registerRoutes(app: FastifyInstance) {
     }
   });
 
-  // Latest
   app.get<{
     Querystring: { page?: string; type?: string; source?: string };
   }>('/api/latest', {
@@ -85,7 +82,6 @@ export async function registerRoutes(app: FastifyInstance) {
     }
   });
 
-  // Popular
   app.get<{
     Querystring: { page?: string; source?: string };
   }>('/api/popular', {
@@ -117,7 +113,6 @@ export async function registerRoutes(app: FastifyInstance) {
     }
   });
 
-  // Detail
   app.get<{
     Params: { source: string; id: string };
   }>('/api/detail/:source/:id', {
@@ -150,7 +145,6 @@ export async function registerRoutes(app: FastifyInstance) {
     }
   });
 
-  // Chapter images
   app.get<{
     Params: { source: string; seriesId: string; chapterId: string };
   }>('/api/chapter/:source/:seriesId/:chapterId', {
@@ -188,7 +182,6 @@ export async function registerRoutes(app: FastifyInstance) {
     }
   });
 
-  // Genres
   app.get<{
     Querystring: { source?: string };
   }>('/api/genres', {
@@ -218,7 +211,6 @@ export async function registerRoutes(app: FastifyInstance) {
     }
   });
 
-  // Providers info
   app.get('/api/providers', {
     schema: { tags: ['Meta'], summary: 'Available providers' },
   }, async () => ({

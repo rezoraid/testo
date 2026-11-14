@@ -76,3 +76,10 @@ Lihat `.env.example`.
 - Scraper asli tidak diubah fungsinya; adapter hanya membungkus dan menambahkan `popular` / `genres` dari endpoint yang memang ada di situs.
 - Cache miss → scrape → (async) upsert ke Postgres → cache Redis.
 - Jika Redis / Postgres down, API tetap jalan (graceful degradation).
+
+## Deploy (Railway)
+
+- Build: `npm run build`, Start: `npm start`
+- `DATABASE_URL` dan `REDIS_URL` bersifat opsional. Tanpa keduanya API tetap jalan (tanpa cache dan tanpa penyimpanan).
+- Tabel database dibuat otomatis saat aplikasi start jika `DATABASE_URL` diisi.
+- Lihat `.env.example` untuk daftar variabel.
