@@ -1,4 +1,4 @@
-import Fastify from 'fastify';
+import Fastify, { type FastifyError } from 'fastify';
 import cors from '@fastify/cors';
 import rateLimit from '@fastify/rate-limit';
 import swagger from '@fastify/swagger';
@@ -51,16 +51,15 @@ export async function buildApp() {
 
   await registerRoutes(app);
 
-  app.setErrorHandler((err, _req, reply) => {
+  app.setErrorHandler((err: FastifyError, _req, reply) => {
     app.log.error(err);
-    const status = (err as any).statusCode || 500;
+    const status = err.statusCode ?? 500;
     reply.code(status).send({
       success: false,
       error: err.message || 'Internal Server Error',
     });
   });
 
-  // Ensure redis connection (non-blocking if fails)
   await cache.connect().catch(() => {});
 
   return app;

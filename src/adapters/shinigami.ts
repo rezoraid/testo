@@ -1,4 +1,4 @@
-import * as shinigami from './shinigami.js';
+import * as shinigami from '../scrapers/shinigami.js';
 import { BaseAdapter } from './base.js';
 import type { ListItem, DetailItem, ChapterContent, GenreItem } from '../types/index.js';
 

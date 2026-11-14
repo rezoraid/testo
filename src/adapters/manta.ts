@@ -1,4 +1,4 @@
-import * as manta from './manta.js';
+import * as manta from '../scrapers/manta.js';
 import { BaseAdapter } from './base.js';
 import type { ListItem, DetailItem, ChapterContent, GenreItem } from '../types/index.js';
 

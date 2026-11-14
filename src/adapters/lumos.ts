@@ -1,4 +1,4 @@
-import * as lumos from './lumos.js';
+import * as lumos from '../scrapers/lumos.js';
 import { BaseAdapter } from './base.js';
 import type { ListItem, DetailItem, ChapterContent, GenreItem } from '../types/index.js';
 
